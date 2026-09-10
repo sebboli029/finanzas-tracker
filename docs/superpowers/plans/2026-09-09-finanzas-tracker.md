@@ -2820,7 +2820,7 @@ def render_retirar_inversion(movimientos):
             _guardar_retiro_inversion(destino, opcion, monto_retirar, movimientos)
 ```
 
-Add `from datetime import date` and `import pandas as pd` to the top of `resumen_tab.py` if not already there from Task 10 (Task 10's header code already imports `pandas as pd`? — it does not; add both imports now alongside the existing `import streamlit as st`).
+`resumen_tab.py` already imports `from datetime import date`, `import pandas as pd`, and `import streamlit as st` at the top from Task 10 — do not add duplicate imports; the new code in this task uses those existing imports.
 
 - [ ] **Step 4: Run to verify pass**
 
