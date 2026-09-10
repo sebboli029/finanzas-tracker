@@ -25,3 +25,16 @@ def _aislar_datos_reales(tmp_path, monkeypatch):
     pd.DataFrame(columns=[
         "fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta",
     ]).to_csv(data_store.MOVIMIENTOS_FILE, index=False)
+
+
+import inversion_tab
+
+
+@pytest.fixture(autouse=True)
+def _sin_red_inversion(monkeypatch):
+    """Simula estar sin internet para toda la suite: la app ya sabe seguir
+    con la última tasa o valor guardado cuando el fetch en vivo devuelve
+    None. Sin esto, correr la suite sin conexión sería flaky."""
+    monkeypatch.setattr(inversion_tab, "_tasa_en_vivo", lambda codigo, moneda_destino: None)
+    monkeypatch.setattr(inversion_tab, "_precio_cripto", lambda id_coingecko: None)
+    monkeypatch.setattr(inversion_tab, "_precio_accion", lambda ticker: None)
