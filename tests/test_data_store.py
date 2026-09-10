@@ -1,7 +1,16 @@
+from datetime import date
+
 import pandas as pd
 
 import config
 import data_store
+from data_store import (
+    activar_periodo,
+    gastado_en_periodo,
+    pendiente_por_cobrar,
+    periodo_actual,
+    saldo_restante_periodo,
+)
 
 
 def test_money_formatea_moneda_base_por_defecto_usd():
@@ -70,3 +79,129 @@ def test_deshacer_ultimo_cambio_sin_respaldos_devuelve_false(tmp_path):
     pd.DataFrame({"a": [1]}).to_csv(archivo, index=False)
 
     assert data_store.deshacer_ultimo_cambio(archivo) is False
+
+
+def _periodos():
+    return pd.DataFrame([
+        {"periodo_id": "P1", "fecha_inicio": pd.Timestamp("2026-08-01"),
+         "origen": "Sueldo", "monto_esperado": 1000, "monto_recibido": 600},
+        {"periodo_id": "P0", "fecha_inicio": pd.Timestamp("2026-07-01"),
+         "origen": "Sueldo", "monto_esperado": 800, "monto_recibido": 800},
+    ])
+
+
+def _movimientos_periodos():
+    return pd.DataFrame([
+        {"fecha": pd.Timestamp("2026-08-02"), "tipo": "Gasto", "categoria": "🍽️ Comida",
+         "monto": 40, "periodo_id": "P1", "nota": "", "cuenta": "Efectivo"},
+        {"fecha": pd.Timestamp("2026-08-03"), "tipo": "Gasto", "categoria": "🚌 Transporte",
+         "monto": 15, "periodo_id": "P1", "nota": "", "cuenta": "Efectivo"},
+        {"fecha": pd.Timestamp("2026-07-05"), "tipo": "Gasto", "categoria": "🍽️ Comida",
+         "monto": 30, "periodo_id": "P0", "nota": "", "cuenta": "Efectivo"},
+    ])
+
+
+def test_pendiente_por_cobrar_suma_diferencia_de_todos_los_periodos():
+    assert pendiente_por_cobrar(_periodos()) == 400
+
+
+def test_gastado_en_periodo_filtra_por_id():
+    assert gastado_en_periodo(_movimientos_periodos(), "P1") == 55
+    assert gastado_en_periodo(_movimientos_periodos(), "P0") == 30
+
+
+def test_saldo_restante_periodo_resta_gastado_del_recibido():
+    assert saldo_restante_periodo(_periodos(), _movimientos_periodos(), "P1") == 600 - 55
+
+
+def _periodos_con_activa():
+    return pd.DataFrame([
+        {"periodo_id": "P1", "fecha_inicio": pd.Timestamp("2020-01-01"), "fecha_fin": pd.Timestamp("2020-01-15"),
+         "origen": "Sueldo", "monto_esperado": 1000, "monto_recibido": 0, "activa": False},
+        {"periodo_id": "P2", "fecha_inicio": pd.Timestamp("2020-01-15"), "fecha_fin": pd.Timestamp("2020-01-29"),
+         "origen": "Sueldo", "monto_esperado": 1000, "monto_recibido": 0, "activa": False},
+    ])
+
+
+def test_activar_periodo_marca_uno_y_desactiva_los_demas():
+    periodos = _periodos_con_activa()
+    periodos.loc[periodos.periodo_id == "P1", "activa"] = True
+
+    resultado = activar_periodo(periodos, "P2")
+
+    assert resultado.loc[resultado.periodo_id == "P2", "activa"].iloc[0] == True
+    assert resultado.loc[resultado.periodo_id == "P1", "activa"].iloc[0] == False
+
+
+def test_activar_periodo_id_inexistente_no_hace_nada():
+    periodos = _periodos_con_activa()
+    periodos.loc[periodos.periodo_id == "P1", "activa"] = True
+
+    resultado = activar_periodo(periodos, "P_borrado")
+
+    assert resultado.loc[resultado.periodo_id == "P1", "activa"].iloc[0] == True
+
+
+def test_periodo_actual_prioriza_el_marcado_activo_sobre_la_fecha():
+    periodos = _periodos_con_activa()
+    periodos.loc[periodos.periodo_id == "P1", "activa"] = True
+
+    assert periodo_actual(periodos).periodo_id == "P1"
+
+
+def test_periodo_actual_sin_ninguno_activo_cae_al_mas_reciente_por_fecha():
+    assert periodo_actual(_periodos_con_activa()).periodo_id == "P2"
+
+
+def test_periodo_actual_vacio_devuelve_none():
+    vacio = pd.DataFrame(columns=["periodo_id", "fecha_inicio", "origen", "monto_esperado", "monto_recibido", "activa"])
+    assert periodo_actual(vacio) is None
+
+
+def test_load_periodos_sin_columna_activa_la_agrega_en_false(tmp_path, monkeypatch):
+    archivo = tmp_path / "periodos.csv"
+    pd.DataFrame([
+        {"periodo_id": "P1", "fecha_inicio": "2026-08-01", "origen": "Sueldo",
+         "monto_esperado": 1000, "monto_recibido": 0},
+    ]).to_csv(archivo, index=False)
+    monkeypatch.setattr(data_store, "PERIODOS_FILE", archivo)
+
+    cargados = data_store.load_periodos()
+
+    assert cargados.loc[0, "activa"] == False
+
+
+def test_load_periodos_sin_columna_fecha_fin_la_calcula_como_inicio_mas_14(tmp_path, monkeypatch):
+    archivo = tmp_path / "periodos.csv"
+    pd.DataFrame([
+        {"periodo_id": "P1", "fecha_inicio": "2026-08-01", "origen": "Sueldo",
+         "monto_esperado": 1000, "monto_recibido": 0},
+    ]).to_csv(archivo, index=False)
+    monkeypatch.setattr(data_store, "PERIODOS_FILE", archivo)
+
+    cargados = data_store.load_periodos()
+
+    assert cargados.loc[0, "fecha_fin"] == pd.Timestamp("2026-08-15")
+
+
+def test_load_periodos_con_columna_fecha_fin_la_respeta(tmp_path, monkeypatch):
+    archivo = tmp_path / "periodos.csv"
+    pd.DataFrame([
+        {"periodo_id": "P1", "fecha_inicio": "2026-08-01", "fecha_fin": "2026-08-17",
+         "origen": "Sueldo", "monto_esperado": 1000, "monto_recibido": 0},
+    ]).to_csv(archivo, index=False)
+    monkeypatch.setattr(data_store, "PERIODOS_FILE", archivo)
+
+    cargados = data_store.load_periodos()
+
+    assert cargados.loc[0, "fecha_fin"] == pd.Timestamp("2026-08-17")
+
+
+def test_periodo_actual_respeta_un_fecha_fin_mas_largo_que_14_dias():
+    hoy = pd.Timestamp(date.today())
+    periodos = pd.DataFrame([{
+        "periodo_id": "P1", "fecha_inicio": hoy - pd.Timedelta(days=16), "fecha_fin": hoy + pd.Timedelta(days=1),
+        "origen": "Sueldo", "monto_esperado": 1000, "monto_recibido": 0, "activa": False,
+    }])
+
+    assert periodo_actual(periodos).periodo_id == "P1"
