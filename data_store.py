@@ -190,3 +190,155 @@ def ajustar_saldo_cuenta(cuentas, cuenta, delta):
     idx = cuentas[cuentas.cuenta == cuenta].index
     cuentas.loc[idx, "saldo"] += delta
     return cuentas
+
+
+INVERSIONES_DEFAULT = ["FIC", "Inversión"]
+CRIPTOS_DEFAULT = [
+    {"id": "bitcoin", "simbolo": "BTC", "cantidad": 0.0, "precio_compra": 0.0},
+    {"id": "solana", "simbolo": "SOL", "cantidad": 0.0, "precio_compra": 0.0},
+]
+
+# Mismo set de 7 colores validado, slots 1-7, para el gráfico de distribución del patrimonio.
+PATRIMONIO_COLOR_MAP = {
+    "Bancos": "#2a78d6",
+    "Efectivo": "#eb6834",
+    "FIC": "#1baf7a",
+    "Inversión": "#eda100",
+    "Monedas extranjeras": "#e87ba4",
+    "Cripto": "#008300",
+    "Acciones": "#4a3aa7",
+}
+
+
+def load_inversiones():
+    if not INVERSIONES_FILE.exists():
+        return pd.DataFrame({
+            "item": INVERSIONES_DEFAULT,
+            "saldo": [0] * len(INVERSIONES_DEFAULT),
+            "actualizado": [date.today().isoformat()] * len(INVERSIONES_DEFAULT),
+        })
+    df = pd.read_csv(INVERSIONES_FILE)
+    if "actualizado" not in df.columns:
+        df["actualizado"] = date.today().isoformat()
+    return df
+
+
+def save_inversiones(df):
+    guardar_con_respaldo(INVERSIONES_FILE, df)
+
+
+def load_monedas():
+    if not MONEDAS_FILE.exists():
+        df = pd.DataFrame({"moneda": ["Euros"], "monto": [0.0], "tasa": [0.0]})
+    else:
+        df = pd.read_csv(MONEDAS_FILE)
+    df["monto"] = df["monto"].astype(float)
+    df["tasa"] = df["tasa"].astype(float)
+    return df
+
+
+def save_monedas(df):
+    guardar_con_respaldo(MONEDAS_FILE, df)
+
+
+def load_criptos():
+    if not CRIPTOS_FILE.exists():
+        df = pd.DataFrame(CRIPTOS_DEFAULT)
+    else:
+        # dtype fuerza "id" a texto: si todas las filas tienen el id vacío,
+        # pandas la infiere como float64 (sin nada de texto para deducir el
+        # tipo) y el data_editor no deja escribir letras en esa columna.
+        df = pd.read_csv(CRIPTOS_FILE, dtype={"id": "object"})
+        if "precio_compra" not in df.columns:
+            df["precio_compra"] = 0.0
+    df["cantidad"] = df["cantidad"].astype(float)
+    df["precio_compra"] = df["precio_compra"].fillna(0.0).astype(float)
+    return df
+
+
+def save_criptos(df):
+    guardar_con_respaldo(CRIPTOS_FILE, df)
+
+
+def load_acciones():
+    if not ACCIONES_FILE.exists():
+        df = pd.DataFrame({
+            "ticker": pd.Series(dtype="str"),
+            "cantidad": pd.Series(dtype="float"),
+            "precio_compra": pd.Series(dtype="float"),
+        })
+    else:
+        df = pd.read_csv(ACCIONES_FILE, dtype={"ticker": "object"})
+        if "precio_compra" not in df.columns:
+            df["precio_compra"] = 0.0
+    df["cantidad"] = df["cantidad"].astype(float)
+    df["precio_compra"] = df["precio_compra"].fillna(0.0).astype(float)
+    return df
+
+
+def save_acciones(df):
+    guardar_con_respaldo(ACCIONES_FILE, df)
+
+
+def load_historico():
+    if not HISTORICO_FILE.exists():
+        return pd.DataFrame({"fecha": pd.Series(dtype="datetime64[ns]"), "patrimonio_total": pd.Series(dtype="float")})
+    return pd.read_csv(HISTORICO_FILE, parse_dates=["fecha"])
+
+
+def registrar_snapshot_patrimonio(fecha, total):
+    """Guarda (o actualiza si ya existe) el patrimonio total del día de hoy."""
+    historico = load_historico()
+    fecha = pd.Timestamp(fecha).normalize()
+    coincide = historico["fecha"] == fecha
+    if coincide.any():
+        historico.loc[coincide, "patrimonio_total"] = total
+    else:
+        historico = pd.concat(
+            [historico, pd.DataFrame([{"fecha": fecha, "patrimonio_total": total}])], ignore_index=True
+        )
+    historico = historico.sort_values("fecha")
+    guardar_con_respaldo(HISTORICO_FILE, historico)
+    return historico
+
+
+def ajustar_saldo_inversion(inversiones, item, delta):
+    """Suma `delta` al saldo de un ítem manual de inversiones y marca
+    `actualizado` como hoy."""
+    idx = inversiones[inversiones.item == item].index
+    inversiones.loc[idx, "saldo"] += delta
+    inversiones.loc[idx, "actualizado"] = date.today().isoformat()
+    return inversiones
+
+
+def registrar_compra_activo(activos, columna_id, identificador, cantidad_nueva, precio_compra_nuevo):
+    """Suma `cantidad_nueva` a la fila de `identificador` en `activos` (cripto
+    o acciones) y recalcula `precio_compra` como promedio ponderado entre lo
+    que ya había y la compra nueva. Si no había precio de compra cargado
+    antes (0) o no había cantidad, no hay costo previo real que promediar —
+    el precio de compra queda directo el de la compra nueva. `precio_compra`
+    siempre queda en la moneda base de la app, sin importar en qué moneda
+    cotice el activo — quien llama es responsable de convertir antes de
+    pasarlo."""
+    idx = activos[activos[columna_id] == identificador].index
+    fila = activos.loc[idx[0]]
+    cantidad_vieja, precio_viejo = fila["cantidad"], fila["precio_compra"]
+    if precio_viejo == 0 or cantidad_vieja == 0:
+        precio_final = precio_compra_nuevo
+    else:
+        precio_final = (
+            cantidad_vieja * precio_viejo + cantidad_nueva * precio_compra_nuevo
+        ) / (cantidad_vieja + cantidad_nueva)
+    activos.loc[idx, "cantidad"] = cantidad_vieja + cantidad_nueva
+    activos.loc[idx, "precio_compra"] = precio_final
+    return activos
+
+
+def registrar_venta_activo(activos, columna_id, identificador, cantidad_vendida):
+    """Resta `cantidad_vendida` a la fila de `identificador` en `activos`
+    (cripto o acciones). No toca `precio_compra`: vender no cambia el costo
+    promedio de lo que queda de la posición, solo comprar sí. Quien llama
+    tiene que validar antes que `cantidad_vendida` no supere lo que hay."""
+    idx = activos[activos[columna_id] == identificador].index
+    activos.loc[idx, "cantidad"] -= cantidad_vendida
+    return activos

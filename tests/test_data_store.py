@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date as _date
 
 import pandas as pd
 
@@ -7,12 +7,16 @@ import data_store
 from data_store import (
     activar_periodo,
     ajustar_saldo_cuenta,
+    ajustar_saldo_inversion,
     delta_por_tipo,
     efectivo,
     gastado_en_periodo,
     pendiente_por_cobrar,
     periodo_actual,
     regalos_total,
+    registrar_compra_activo,
+    registrar_snapshot_patrimonio,
+    registrar_venta_activo,
     saldo_disponible,
     saldo_restante_periodo,
 )
@@ -203,7 +207,7 @@ def test_load_periodos_con_columna_fecha_fin_la_respeta(tmp_path, monkeypatch):
 
 
 def test_periodo_actual_respeta_un_fecha_fin_mas_largo_que_14_dias():
-    hoy = pd.Timestamp(date.today())
+    hoy = pd.Timestamp(_date.today())
     periodos = pd.DataFrame([{
         "periodo_id": "P1", "fecha_inicio": hoy - pd.Timedelta(days=16), "fecha_fin": hoy + pd.Timedelta(days=1),
         "origen": "Sueldo", "monto_esperado": 1000, "monto_recibido": 0, "activa": False,
@@ -266,3 +270,79 @@ def test_gasto_inversion_esta_en_categorias_y_tiene_color():
 def test_retiro_inversion_esta_en_categorias_de_ingreso():
     assert "📈 Retiro de inversión" in data_store.INGRESO_CATEGORIAS
     assert "📈 Retiro de inversión" not in data_store.INGRESO_PERIODICO_CATEGORIAS
+
+
+def test_ajustar_saldo_inversion_suma_delta_y_marca_actualizado_hoy():
+    inversiones = pd.DataFrame({
+        "item": ["FIC", "Inversión"], "saldo": [1000, 500],
+        "actualizado": ["2026-01-01", "2026-01-01"],
+    })
+
+    resultado = ajustar_saldo_inversion(inversiones, "Inversión", 300)
+
+    assert resultado.loc[resultado.item == "Inversión", "saldo"].iloc[0] == 800
+    assert resultado.loc[resultado.item == "Inversión", "actualizado"].iloc[0] == _date.today().isoformat()
+    assert resultado.loc[resultado.item == "FIC", "saldo"].iloc[0] == 1000
+
+
+def test_registrar_compra_activo_promedia_precio_de_compra_ponderado():
+    activos = pd.DataFrame({"id": ["bitcoin"], "cantidad": [1.0], "precio_compra": [40000.0]})
+
+    resultado = registrar_compra_activo(activos, "id", "bitcoin", cantidad_nueva=1.0, precio_compra_nuevo=60000.0)
+
+    assert resultado.loc[0, "cantidad"] == 2.0
+    assert resultado.loc[0, "precio_compra"] == 50000.0
+
+
+def test_registrar_compra_activo_sin_precio_previo_usa_el_precio_nuevo():
+    activos = pd.DataFrame({"id": ["bitcoin"], "cantidad": [1.0], "precio_compra": [0.0]})
+
+    resultado = registrar_compra_activo(activos, "id", "bitcoin", cantidad_nueva=0.5, precio_compra_nuevo=70000.0)
+
+    assert resultado.loc[0, "cantidad"] == 1.5
+    assert resultado.loc[0, "precio_compra"] == 70000.0
+
+
+def test_registrar_compra_activo_sin_cantidad_previa_usa_el_precio_nuevo():
+    activos = pd.DataFrame({"ticker": ["AAPL"], "cantidad": [0.0], "precio_compra": [0.0]})
+
+    resultado = registrar_compra_activo(activos, "ticker", "AAPL", cantidad_nueva=2.0, precio_compra_nuevo=200.0)
+
+    assert resultado.loc[0, "cantidad"] == 2.0
+    assert resultado.loc[0, "precio_compra"] == 200.0
+
+
+def test_registrar_venta_activo_resta_cantidad():
+    activos = pd.DataFrame({"id": ["bitcoin"], "cantidad": [2.0], "precio_compra": [40000.0]})
+
+    resultado = registrar_venta_activo(activos, "id", "bitcoin", cantidad_vendida=0.5)
+
+    assert resultado.loc[0, "cantidad"] == 1.5
+
+
+def test_registrar_venta_activo_no_cambia_precio_compra():
+    activos = pd.DataFrame({"ticker": ["AAPL"], "cantidad": [3.0], "precio_compra": [150.0]})
+
+    resultado = registrar_venta_activo(activos, "ticker", "AAPL", cantidad_vendida=1.0)
+
+    assert resultado.loc[0, "precio_compra"] == 150.0
+
+
+def test_registrar_snapshot_patrimonio_agrega_fila_nueva(tmp_path, monkeypatch):
+    archivo = tmp_path / "historico.csv"
+    monkeypatch.setattr(data_store, "HISTORICO_FILE", archivo)
+
+    resultado = registrar_snapshot_patrimonio(_date(2026, 8, 1), 1000)
+
+    assert resultado.loc[0, "patrimonio_total"] == 1000
+
+
+def test_registrar_snapshot_patrimonio_actualiza_la_fila_de_hoy_si_ya_existe(tmp_path, monkeypatch):
+    archivo = tmp_path / "historico.csv"
+    monkeypatch.setattr(data_store, "HISTORICO_FILE", archivo)
+    registrar_snapshot_patrimonio(_date(2026, 8, 1), 1000)
+
+    resultado = registrar_snapshot_patrimonio(_date(2026, 8, 1), 1500)
+
+    assert len(resultado) == 1
+    assert resultado.loc[0, "patrimonio_total"] == 1500
