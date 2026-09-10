@@ -121,3 +121,72 @@ def saldo_restante_periodo(periodos, movimientos, periodo_id):
 
 def save_periodos(df):
     guardar_con_respaldo(PERIODOS_FILE, df)
+
+
+CUENTAS_DEFAULT = ["Cuenta corriente", "Ahorros", "Tarjeta de crédito"]
+CUENTAS_CON_EFECTIVO = CUENTAS_DEFAULT + ["Efectivo"]
+
+GASTO_CATEGORIAS = ["🚌 Transporte", "🍽️ Comida", "🎮 Ocio", "📦 Otro", "📈 Inversión"]
+INGRESO_CATEGORIAS = [
+    "💰 Ingreso periódico", "💰 Ingreso periódico (adelanto)", "🎁 Ingreso extra", "🎁 Regalo",
+    "🎒 Saldo inicial", "📈 Retiro de inversión",
+]
+
+# Categorías que sí cuentan como pago del periodo (descuentan el pendiente del periodo)
+INGRESO_PERIODICO_CATEGORIAS = {"💰 Ingreso periódico", "💰 Ingreso periódico (adelanto)"}
+
+COLOR_MAP = {
+    "🚌 Transporte": "#2a78d6",
+    "🍽️ Comida": "#eb6834",
+    "🎮 Ocio": "#1baf7a",
+    "📦 Otro": "#eda100",
+    "📈 Inversión": "#e87ba4",
+}
+
+
+def load_movimientos():
+    return pd.read_csv(MOVIMIENTOS_FILE, parse_dates=["fecha"])
+
+
+def save_movimientos(df):
+    guardar_con_respaldo(MOVIMIENTOS_FILE, df)
+
+
+def load_cuentas():
+    if not CUENTAS_FILE.exists():
+        return pd.DataFrame({"cuenta": CUENTAS_DEFAULT, "saldo": [0] * len(CUENTAS_DEFAULT)})
+    return pd.read_csv(CUENTAS_FILE)
+
+
+def save_cuentas(df):
+    guardar_con_respaldo(CUENTAS_FILE, df)
+
+
+def regalos_total(movimientos):
+    ingresos = movimientos[movimientos.tipo == "Ingreso"]
+    return ingresos.loc[ingresos.categoria == "🎁 Regalo", "monto"].sum()
+
+
+def saldo_disponible(movimientos):
+    ingresos = movimientos.loc[movimientos.tipo == "Ingreso", "monto"].sum()
+    gastos = movimientos.loc[movimientos.tipo == "Gasto", "monto"].sum()
+    return ingresos - gastos
+
+
+def efectivo(movimientos, cuentas):
+    return saldo_disponible(movimientos) - cuentas["saldo"].sum()
+
+
+def delta_por_tipo(tipo, monto):
+    return monto if tipo == "Ingreso" else -monto
+
+
+def ajustar_saldo_cuenta(cuentas, cuenta, delta):
+    """Suma `delta` al saldo de `cuenta`. No hace nada si `cuenta` no es una
+    cuenta bancaria conocida (p.ej. "Efectivo" o sin especificar) — ese caso
+    ya queda reflejado solo, porque el efectivo se calcula como el resto."""
+    if delta == 0 or cuenta not in cuentas["cuenta"].values:
+        return cuentas
+    idx = cuentas[cuentas.cuenta == cuenta].index
+    cuentas.loc[idx, "saldo"] += delta
+    return cuentas

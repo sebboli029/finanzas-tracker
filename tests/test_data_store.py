@@ -6,9 +6,14 @@ import config
 import data_store
 from data_store import (
     activar_periodo,
+    ajustar_saldo_cuenta,
+    delta_por_tipo,
+    efectivo,
     gastado_en_periodo,
     pendiente_por_cobrar,
     periodo_actual,
+    regalos_total,
+    saldo_disponible,
     saldo_restante_periodo,
 )
 
@@ -205,3 +210,59 @@ def test_periodo_actual_respeta_un_fecha_fin_mas_largo_que_14_dias():
     }])
 
     assert periodo_actual(periodos).periodo_id == "P1"
+
+
+def _movimientos_generales():
+    return pd.DataFrame([
+        {"fecha": pd.Timestamp("2026-08-02"), "tipo": "Ingreso", "categoria": "🎁 Regalo",
+         "monto": 20, "periodo_id": pd.NA, "nota": "", "cuenta": "Efectivo"},
+        {"fecha": pd.Timestamp("2026-08-02"), "tipo": "Ingreso", "categoria": "🎁 Regalo",
+         "monto": 5, "periodo_id": pd.NA, "nota": "", "cuenta": "Efectivo"},
+        {"fecha": pd.Timestamp("2026-08-02"), "tipo": "Gasto", "categoria": "🍽️ Comida",
+         "monto": 8, "periodo_id": pd.NA, "nota": "", "cuenta": "Efectivo"},
+    ])
+
+
+def test_regalos_total_suma_solo_esa_categoria():
+    assert regalos_total(_movimientos_generales()) == 25
+
+
+def test_saldo_disponible_resta_gastos_de_ingresos():
+    assert saldo_disponible(_movimientos_generales()) == 25 - 8
+
+
+def test_efectivo_resta_saldo_de_cuentas_del_disponible():
+    cuentas = pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [10]})
+    assert efectivo(_movimientos_generales(), cuentas) == (25 - 8) - 10
+
+
+def test_delta_por_tipo_ingreso_es_positivo_gasto_es_negativo():
+    assert delta_por_tipo("Ingreso", 100) == 100
+    assert delta_por_tipo("Gasto", 100) == -100
+
+
+def test_ajustar_saldo_cuenta_suma_delta_a_la_cuenta_correcta():
+    cuentas = pd.DataFrame({"cuenta": ["Ahorros", "Corriente"], "saldo": [100, 50]})
+
+    resultado = ajustar_saldo_cuenta(cuentas, "Corriente", 25)
+
+    assert resultado.loc[resultado.cuenta == "Corriente", "saldo"].iloc[0] == 75
+    assert resultado.loc[resultado.cuenta == "Ahorros", "saldo"].iloc[0] == 100
+
+
+def test_ajustar_saldo_cuenta_ignora_cuenta_desconocida():
+    cuentas = pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [100]})
+
+    resultado = ajustar_saldo_cuenta(cuentas, "Efectivo", 25)
+
+    assert resultado.loc[resultado.cuenta == "Ahorros", "saldo"].iloc[0] == 100
+
+
+def test_gasto_inversion_esta_en_categorias_y_tiene_color():
+    assert "📈 Inversión" in data_store.GASTO_CATEGORIAS
+    assert "📈 Inversión" in data_store.COLOR_MAP
+
+
+def test_retiro_inversion_esta_en_categorias_de_ingreso():
+    assert "📈 Retiro de inversión" in data_store.INGRESO_CATEGORIAS
+    assert "📈 Retiro de inversión" not in data_store.INGRESO_PERIODICO_CATEGORIAS
