@@ -145,3 +145,200 @@ def test_render_alerta_con_restante_comodo_no_muestra_nada():
     assert not at.exception
     assert len(at.error) == 0
     assert len(at.warning) == 0
+
+
+def test_mover_dinero_entre_cuentas_ajusta_ambos_saldos():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros", "Corriente"], "saldo": [100, 50]}))
+
+    def _app():
+        import pandas as pd
+
+        import resumen_tab
+        resumen_tab.render_cuentas(pd.DataFrame(
+            columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+        ))
+
+    at = AppTest.from_function(_app)
+    at.run()
+    at.selectbox(key="mov_origen").select("Ahorros").run()
+    at.selectbox(key="mov_destino").select("Corriente").run()
+    at.number_input(key="mov_monto").set_value(30).run()
+    next(b for b in at.button if "Mover" == b.label.split(" ", 1)[-1] or b.label.endswith("Mover")).click().run()
+
+    cuentas = data_store.load_cuentas()
+    assert cuentas.loc[cuentas.cuenta == "Ahorros", "saldo"].iloc[0] == 70
+    assert cuentas.loc[cuentas.cuenta == "Corriente", "saldo"].iloc[0] == 80
+
+
+def test_mover_dinero_origen_igual_a_destino_da_error():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [100]}))
+
+    def _app():
+        import pandas as pd
+
+        import resumen_tab
+        resumen_tab.render_cuentas(pd.DataFrame(
+            columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+        ))
+
+    at = AppTest.from_function(_app)
+    at.run()
+    at.number_input(key="mov_monto").set_value(10).run()
+    at.button(key="mover_dinero_form-Mover").run() if False else None
+    boton = next(b for b in at.button if b.label.endswith("Mover"))
+    boton.click().run()
+
+    assert any("cuentas distintas" in e.value for e in at.error)
+
+
+def test_ajustar_saldo_base_permite_negativo_para_tarjeta_de_credito():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Tarjeta de crédito"], "saldo": [0]}))
+
+    def _app():
+        import pandas as pd
+
+        import resumen_tab
+        resumen_tab.render_cuentas(pd.DataFrame(
+            columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+        ))
+
+    at = AppTest.from_function(_app)
+    at.run()
+    at.number_input(key="cuenta_Tarjeta de crédito").set_value(-200).run()
+    boton = next(b for b in at.button if "Guardar saldos" in b.label)
+    boton.click().run()
+
+    assert data_store.load_cuentas().loc[0, "saldo"] == -200
+
+
+def test_efectivo_negativo_muestra_advertencia():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [1000]}))
+
+    def _app():
+        import pandas as pd
+
+        import resumen_tab
+        resumen_tab.render_cuentas(pd.DataFrame(
+            columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+        ))
+
+    at = AppTest.from_function(_app)
+    at.run()
+
+    assert any("efectivo calculado da negativo" in w.value for w in at.warning)
+
+
+def test_mover_a_inversion_manual_resta_disponible_y_sube_inversion():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [500]}))
+    data_store.save_inversiones(pd.DataFrame({"item": ["FIC"], "saldo": [0], "actualizado": ["2026-01-01"]}))
+    movimientos = pd.DataFrame(columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"])
+
+    def _app():
+        import streamlit as st
+
+        import resumen_tab
+        resumen_tab.render_mover_a_inversion(st.session_state["movimientos"])
+
+    at = AppTest.from_function(_app)
+    at.session_state["movimientos"] = movimientos
+    at.run()
+    at.selectbox(key="mov_inv_origen").select("Ahorros").run()
+    at.selectbox(key="mov_inv_destino").select("FIC").run()
+    at.number_input(key="mov_inv_monto").set_value(100).run()
+    boton = next(b for b in at.button if "Mover a inversión" in b.label)
+    boton.click().run()
+
+    assert data_store.load_cuentas().loc[0, "saldo"] == 400
+    assert data_store.load_inversiones().loc[0, "saldo"] == 100
+    guardado = data_store.load_movimientos()
+    assert guardado.iloc[0]["categoria"] == "📈 Inversión"
+    assert guardado.iloc[0]["monto"] == 100
+
+
+def test_mover_a_inversion_monto_cero_da_error():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [500]}))
+    data_store.save_inversiones(pd.DataFrame({"item": ["FIC"], "saldo": [0], "actualizado": ["2026-01-01"]}))
+
+    def _app():
+        import streamlit as st
+
+        import resumen_tab
+        resumen_tab.render_mover_a_inversion(st.session_state["movimientos"])
+
+    at = AppTest.from_function(_app)
+    at.session_state["movimientos"] = pd.DataFrame(
+        columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+    )
+    at.run()
+    boton = next(b for b in at.button if "Mover a inversión" in b.label)
+    boton.click().run()
+
+    assert len(at.error) == 1
+    assert data_store.load_inversiones().loc[0, "saldo"] == 0
+
+
+def test_retirar_inversion_manual_sube_cuenta_y_baja_inversion():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [0]}))
+    data_store.save_inversiones(pd.DataFrame({"item": ["FIC"], "saldo": [300], "actualizado": ["2026-01-01"]}))
+
+    def _app():
+        import streamlit as st
+
+        import resumen_tab
+        resumen_tab.render_retirar_inversion(st.session_state["movimientos"])
+
+    at = AppTest.from_function(_app)
+    at.session_state["movimientos"] = pd.DataFrame(
+        columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+    )
+    at.run()
+    at.selectbox(key="ret_inv_origen").select("FIC").run()
+    at.selectbox(key="ret_inv_destino").select("Ahorros").run()
+    at.number_input(key="ret_inv_monto").set_value(100).run()
+    boton = next(b for b in at.button if "Retirar de inversión" in b.label)
+    boton.click().run()
+
+    assert data_store.load_cuentas().loc[0, "saldo"] == 100
+    assert data_store.load_inversiones().loc[0, "saldo"] == 200
+    guardado = data_store.load_movimientos()
+    assert guardado.iloc[0]["categoria"] == "📈 Retiro de inversión"
+
+
+def test_retirar_inversion_manual_monto_mayor_al_saldo_da_error():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [0]}))
+    data_store.save_inversiones(pd.DataFrame({"item": ["FIC"], "saldo": [50], "actualizado": ["2026-01-01"]}))
+
+    def _app():
+        import streamlit as st
+
+        import resumen_tab
+        resumen_tab.render_retirar_inversion(st.session_state["movimientos"])
+
+    at = AppTest.from_function(_app)
+    at.session_state["movimientos"] = pd.DataFrame(
+        columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+    )
+    at.run()
+    at.selectbox(key="ret_inv_origen").select("FIC").run()
+    at.number_input(key="ret_inv_monto").set_value(999).run()
+    boton = next(b for b in at.button if "Retirar de inversión" in b.label)
+    boton.click().run()
+
+    assert len(at.error) == 1
+    assert data_store.load_inversiones().loc[0, "saldo"] == 50
