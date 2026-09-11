@@ -150,7 +150,7 @@ def test_render_alerta_con_restante_comodo_no_muestra_nada():
 def test_mover_dinero_entre_cuentas_ajusta_ambos_saldos():
     import data_store
 
-    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros", "Corriente"], "saldo": [100, 50]}))
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros", "Cuenta corriente"], "saldo": [100, 50]}))
 
     def _app():
         import pandas as pd
@@ -163,13 +163,13 @@ def test_mover_dinero_entre_cuentas_ajusta_ambos_saldos():
     at = AppTest.from_function(_app)
     at.run()
     at.selectbox(key="mov_origen").select("Ahorros").run()
-    at.selectbox(key="mov_destino").select("Corriente").run()
+    at.selectbox(key="mov_destino").select("Cuenta corriente").run()
     at.number_input(key="mov_monto").set_value(30).run()
     next(b for b in at.button if "Mover" == b.label.split(" ", 1)[-1] or b.label.endswith("Mover")).click().run()
 
     cuentas = data_store.load_cuentas()
     assert cuentas.loc[cuentas.cuenta == "Ahorros", "saldo"].iloc[0] == 70
-    assert cuentas.loc[cuentas.cuenta == "Corriente", "saldo"].iloc[0] == 80
+    assert cuentas.loc[cuentas.cuenta == "Cuenta corriente", "saldo"].iloc[0] == 80
 
 
 def test_mover_dinero_origen_igual_a_destino_da_error():
@@ -187,8 +187,9 @@ def test_mover_dinero_origen_igual_a_destino_da_error():
 
     at = AppTest.from_function(_app)
     at.run()
+    at.selectbox(key="mov_origen").select("Ahorros").run()
+    at.selectbox(key="mov_destino").select("Ahorros").run()
     at.number_input(key="mov_monto").set_value(10).run()
-    at.button(key="mover_dinero_form-Mover").run() if False else None
     boton = next(b for b in at.button if b.label.endswith("Mover"))
     boton.click().run()
 

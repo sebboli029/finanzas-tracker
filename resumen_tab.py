@@ -103,13 +103,8 @@ def render_cuentas(movimientos):
     with st.expander("🔁 Mover dinero entre cuentas", expanded=True):
         with st.form("mover_dinero_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
-            # Las cuentas realmente cargadas, no CUENTAS_CON_EFECTIVO: "Efectivo"
-            # no tiene saldo propio que ajustar (es el resto calculado), así que
-            # no tiene sentido como origen/destino de una transferencia entre
-            # cuentas con saldo guardado.
-            cuentas_disponibles = list(cuentas.cuenta)
-            origen = c1.selectbox("Desde", cuentas_disponibles, index=0, key="mov_origen")
-            destino = c2.selectbox("Hacia", cuentas_disponibles, index=len(cuentas_disponibles) - 1, key="mov_destino")
+            origen = c1.selectbox("Desde", CUENTAS_CON_EFECTIVO, index=0, key="mov_origen")
+            destino = c2.selectbox("Hacia", CUENTAS_CON_EFECTIVO, index=len(CUENTAS_CON_EFECTIVO) - 1, key="mov_destino")
             monto_mover = c3.number_input("Monto", min_value=0, step=10, key="mov_monto")
             if st.form_submit_button("🔁 Mover"):
                 if monto_mover <= 0:
