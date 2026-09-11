@@ -3,15 +3,40 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+import charts
+import data_store
 from data_store import (
+    COLOR_MAP,
+    CUENTAS_CON_EFECTIVO,
+    GASTO_CATEGORIAS,
+    INGRESO_CATEGORIAS,
+    INGRESO_PERIODICO_CATEGORIAS,
+    activar_periodo,
+    ajustar_saldo_cuenta,
+    ajustar_saldo_inversion,
+    delta_por_tipo,
+    deshacer_ultimo_cambio,
+    efectivo,
     gastado_en_periodo,
+    load_acciones,
+    load_criptos,
+    load_cuentas,
+    load_inversiones,
     money,
     pendiente_por_cobrar,
     periodo_actual,
     regalos_total,
+    registrar_compra_activo,
+    registrar_venta_activo,
     saldo_restante_periodo,
+    save_acciones,
+    save_criptos,
+    save_cuentas,
+    save_inversiones,
+    save_movimientos,
     save_periodos,
 )
+from inversion_tab import precio_activo_de, precio_unitario_base, tasa_usd_a_base
 
 UMBRAL_ALERTA_RESTANTE_PCT = 0.20  # advertir con menos del 20% del recibido restante
 
@@ -65,26 +90,6 @@ def render_header(periodos, movimientos):
     st.subheader("🏠 Inicio")
     render_metricas(periodos, movimientos)
     render_alerta_periodo(periodos, movimientos)
-
-
-from data_store import (
-    CUENTAS_CON_EFECTIVO,
-    ajustar_saldo_cuenta,
-    ajustar_saldo_inversion,
-    efectivo,
-    load_acciones,
-    load_criptos,
-    load_cuentas,
-    load_inversiones,
-    registrar_compra_activo,
-    registrar_venta_activo,
-    save_acciones,
-    save_criptos,
-    save_cuentas,
-    save_inversiones,
-    save_movimientos,
-)
-from inversion_tab import precio_activo_de, precio_unitario_base, tasa_usd_a_base
 
 
 def render_cuentas(movimientos):
@@ -298,19 +303,6 @@ def render_retirar_inversion(movimientos):
             _guardar_retiro_inversion(destino, opcion, monto_retirar, movimientos)
 
 
-from data_store import (
-    COLOR_MAP,
-    GASTO_CATEGORIAS,
-    INGRESO_CATEGORIAS,
-    INGRESO_PERIODICO_CATEGORIAS,
-    activar_periodo,
-    delta_por_tipo,
-    deshacer_ultimo_cambio,
-)
-import charts
-import data_store
-
-
 def _guardar_cambios_periodos(periodos, editado):
     """Aplica a `periodos` los valores editables (Origen/Inicio/Fin/
     Esperado/Recibido/Activa) que vuelven de la tabla y guarda si hubo algún
@@ -382,7 +374,7 @@ def render_periodos_tabla(periodos, movimientos):
             "Gastado": money(gastado),
             "Disponible": money(disponible),
             "Días restantes": dias_restantes,
-            "$/día restante": money(disponible / dias_restantes if dias_restantes else disponible),
+            "Por día restante": money(disponible / dias_restantes if dias_restantes else disponible),
         })
 
     editado = st.data_editor(
@@ -399,7 +391,7 @@ def render_periodos_tabla(periodos, movimientos):
             "Gastado": st.column_config.TextColumn("Gastado", disabled=True),
             "Disponible": st.column_config.TextColumn("Disponible", disabled=True),
             "Días restantes": st.column_config.NumberColumn("Días restantes", disabled=True),
-            "$/día restante": st.column_config.TextColumn("$/día restante", disabled=True),
+            "Por día restante": st.column_config.TextColumn("Por día restante", disabled=True),
         },
     )
 
@@ -437,7 +429,7 @@ def _aplicar_efecto(periodos, cuentas, fila):
 
 
 def _fila_valida(fila):
-    if pd.isna(fila.fecha) or not fila.tipo or fila.monto is None or fila.monto <= 0:
+    if pd.isna(fila.fecha) or not fila.tipo or pd.isna(fila.monto) or fila.monto <= 0:
         return "Faltan datos: revisá que tenga fecha, tipo y un monto mayor a cero."
     categorias_validas = GASTO_CATEGORIAS if fila.tipo == "Gasto" else INGRESO_CATEGORIAS
     if fila.categoria not in categorias_validas:
@@ -543,6 +535,11 @@ def render_deshacer_historial():
             st.rerun()
         else:
             st.info("No hay nada para deshacer.")
+    st.caption(
+        "Restaura la última versión guardada de movimientos, periodos y cuentas — "
+        "si hiciste varios cambios distintos seguidos (ej. mover dinero y después editar un periodo), "
+        "puede deshacer más de uno a la vez."
+    )
 
 
 def _aplicar_filtro_historial(tabla, fecha_desde, fecha_hasta, categorias, cuentas):

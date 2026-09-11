@@ -66,6 +66,13 @@ def money(n):
 
 
 def load_periodos():
+    if not PERIODOS_FILE.exists():
+        df = pd.DataFrame(columns=[
+            "periodo_id", "fecha_inicio", "fecha_fin", "origen", "monto_esperado", "monto_recibido", "activa",
+        ])
+        df["fecha_inicio"] = pd.to_datetime(df["fecha_inicio"])
+        df["fecha_fin"] = pd.to_datetime(df["fecha_fin"])
+        return df
     df = pd.read_csv(PERIODOS_FILE, parse_dates=["fecha_inicio"])
     if "activa" not in df.columns:
         df["activa"] = False
@@ -145,6 +152,10 @@ COLOR_MAP = {
 
 
 def load_movimientos():
+    if not MOVIMIENTOS_FILE.exists():
+        df = pd.DataFrame(columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"])
+        df["fecha"] = pd.to_datetime(df["fecha"])
+        return df
     return pd.read_csv(MOVIMIENTOS_FILE, parse_dates=["fecha"])
 
 

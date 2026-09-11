@@ -14,3 +14,17 @@ def test_la_portada_aparece_antes_de_las_pestanas():
     at.run(timeout=30)
     subheaders = [s.value for s in at.subheader]
     assert "🏠 Inicio" in subheaders
+
+
+def test_app_arranca_en_frio_sin_ningun_csv_previo(tmp_path, monkeypatch):
+    import data_store
+
+    frio = tmp_path / "frio"
+    frio.mkdir()
+    monkeypatch.setattr(data_store, "PERIODOS_FILE", frio / "periodos.csv")
+    monkeypatch.setattr(data_store, "MOVIMIENTOS_FILE", frio / "movimientos.csv")
+
+    at = AppTest.from_file(str(Path(__file__).parent.parent / "app.py"))
+    at.run(timeout=30)
+
+    assert not at.exception

@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.parse import quote
 
 import pandas as pd
 import requests
@@ -6,6 +7,7 @@ import streamlit as st
 
 import config
 from data_store import (
+    formato_moneda,
     load_acciones,
     load_criptos,
     load_inversiones,
@@ -80,7 +82,7 @@ def _precio_accion(ticker):
     (ej. "ECOPETROL.CL") sale en la moneda de esa bolsa."""
     try:
         r = requests.get(
-            f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}",
+            f"https://query2.finance.yahoo.com/v8/finance/chart/{quote(str(ticker), safe='')}",
             headers={"User-Agent": "Mozilla/5.0"}, timeout=5,
         )
         r.raise_for_status()
@@ -115,7 +117,8 @@ def _convertir_base_a(valor_base, moneda_mostrar, tasa_usd):
 def _money_en(moneda_mostrar):
     if moneda_mostrar == config.MONEDA_BASE:
         return money
-    return lambda n: f"${n:,.2f}"
+    fmt = formato_moneda("USD")
+    return lambda n: f"{fmt['simbolo']}{n:,.2f}"
 
 
 def precio_activo_de(tipo, identificador):
@@ -221,6 +224,9 @@ def render_inversiones():
     st.subheader("📈 Inversiones")
     st.caption("Editá el saldo a mano, o movele plata sobrante desde \"Mover a inversión\" en la pestaña Resumen.")
     inversiones = load_inversiones()
+    if inversiones.empty:
+        st.caption("No hay ítems de inversión manual cargados.")
+        return
 
     with st.form("inversiones_form"):
         cols = st.columns(len(inversiones))

@@ -392,6 +392,10 @@ def test_fila_valida_monto_none_da_error():
     assert _fila_valida(_fila_ok(monto=None)) is not None
 
 
+def test_fila_valida_monto_nan_da_error():
+    assert _fila_valida(_fila_ok(monto=float("nan"))) is not None
+
+
 def test_fila_valida_categoria_no_corresponde_al_tipo_da_error():
     fila = _fila_ok(tipo="Gasto", categoria=INGRESO_CATEGORIAS[0])
     assert _fila_valida(fila) is not None

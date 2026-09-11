@@ -206,6 +206,26 @@ def test_load_periodos_con_columna_fecha_fin_la_respeta(tmp_path, monkeypatch):
     assert cargados.loc[0, "fecha_fin"] == pd.Timestamp("2026-08-17")
 
 
+def test_load_periodos_sin_archivo_devuelve_dataframe_vacio_con_columnas_correctas(tmp_path, monkeypatch):
+    monkeypatch.setattr(data_store, "PERIODOS_FILE", tmp_path / "no_existe.csv")
+
+    cargados = data_store.load_periodos()
+
+    assert cargados.empty
+    assert list(cargados.columns) == [
+        "periodo_id", "fecha_inicio", "fecha_fin", "origen", "monto_esperado", "monto_recibido", "activa",
+    ]
+
+
+def test_load_movimientos_sin_archivo_devuelve_dataframe_vacio_con_columnas_correctas(tmp_path, monkeypatch):
+    monkeypatch.setattr(data_store, "MOVIMIENTOS_FILE", tmp_path / "no_existe.csv")
+
+    cargados = data_store.load_movimientos()
+
+    assert cargados.empty
+    assert list(cargados.columns) == ["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
+
+
 def test_periodo_actual_respeta_un_fecha_fin_mas_largo_que_14_dias():
     hoy = pd.Timestamp(_date.today())
     periodos = pd.DataFrame([{
