@@ -36,7 +36,7 @@ def test_nuevo_periodo_alta_valida_se_guarda():
     at.session_state["periodos"] = _periodos_vacios()
     at.run()
 
-    _texto(at, "ID del periodo").set_value("P-2026-08")
+    _texto(at, "ID del periodo").set_value("P-2026-08").run()
     _boton(at, "Crear periodo").click().run()
 
     guardados = data_store.load_periodos()
@@ -73,7 +73,7 @@ def test_nuevo_periodo_id_duplicado_da_error():
     at.session_state["periodos"] = periodos
     at.run()
 
-    _texto(at, "ID del periodo").set_value("P1")
+    _texto(at, "ID del periodo").set_value("P1").run()
     _boton(at, "Crear periodo").click().run()
 
     assert len(at.error) == 1
@@ -106,8 +106,8 @@ def test_gasto_con_periodo_y_cuenta_bancaria_resta_saldo_no_toca_recibido():
     at.session_state["movimientos"] = _movimientos_vacios()
     at.run()
 
-    _numero(at, "Monto").set_value(30)
-    at.selectbox(key="m_cuenta").select("Ahorros")
+    _numero(at, "Monto").set_value(30).run()
+    at.selectbox(key="m_cuenta").select("Ahorros").run()
     _boton(at, "Guardar movimiento").click().run()
 
     guardado = data_store.load_movimientos()
@@ -129,8 +129,8 @@ def test_ingreso_periodico_con_periodo_suma_saldo_y_recibido():
     at.run()
 
     at.radio(key="m_tipo").set_value("Ingreso").run()
-    _numero(at, "Monto").set_value(500)
-    at.selectbox(key="m_cuenta").select("Ahorros")
+    _numero(at, "Monto").set_value(500).run()
+    at.selectbox(key="m_cuenta").select("Ahorros").run()
     _boton(at, "Guardar movimiento").click().run()
 
     guardado = data_store.load_movimientos()
@@ -164,7 +164,7 @@ def test_cuenta_efectivo_no_modifica_cuentas_csv():
     at.session_state["movimientos"] = _movimientos_vacios()
     at.run()
 
-    _numero(at, "Monto").set_value(20)
+    _numero(at, "Monto").set_value(20).run()
     _boton(at, "Guardar movimiento").click().run()
 
     assert len(data_store.load_movimientos()) == 1
@@ -180,8 +180,8 @@ def test_gasto_sin_asociar_a_periodo_deja_periodo_id_vacio():
     at.session_state["movimientos"] = _movimientos_vacios()
     at.run()
 
-    at.checkbox(key="m_asociar_gasto").uncheck()
-    _numero(at, "Monto").set_value(30)
+    at.checkbox(key="m_asociar_gasto").uncheck().run()
+    _numero(at, "Monto").set_value(30).run()
     _boton(at, "Guardar movimiento").click().run()
 
     guardado = data_store.load_movimientos()
