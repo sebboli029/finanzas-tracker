@@ -366,3 +366,90 @@ def test_registrar_snapshot_patrimonio_actualiza_la_fila_de_hoy_si_ya_existe(tmp
 
     assert len(resultado) == 1
     assert resultado.loc[0, "patrimonio_total"] == 1500
+
+
+def test_load_criptos_sin_archivo_trae_columna_precio_en_cero():
+    df = data_store.load_criptos()
+
+    assert "precio" in df.columns
+    assert (df["precio"] == 0.0).all()
+
+
+def test_load_criptos_migra_csv_viejo_sin_columna_precio():
+    """Los CSV creados antes del precio manual no tienen la columna — se
+    rellena en cero para que la fila siga cargando y se muestre como "sin
+    precio" hasta que el usuario la complete."""
+    pd.DataFrame({"id": ["bitcoin"], "simbolo": ["BTC"], "cantidad": [0.5], "precio_compra": [88000.0]}).to_csv(
+        data_store.CRIPTOS_FILE, index=False
+    )
+
+    df = data_store.load_criptos()
+
+    assert df.loc[0, "precio"] == 0.0
+
+
+def test_load_criptos_lee_el_precio_guardado():
+    pd.DataFrame({
+        "id": ["bitcoin"], "simbolo": ["BTC"], "cantidad": [0.5],
+        "precio": [95000.0], "precio_compra": [88000.0],
+    }).to_csv(data_store.CRIPTOS_FILE, index=False)
+
+    df = data_store.load_criptos()
+
+    assert df.loc[0, "precio"] == 95000.0
+
+
+def test_load_criptos_precio_vacio_queda_en_cero():
+    pd.DataFrame({
+        "id": ["bitcoin"], "simbolo": ["BTC"], "cantidad": [0.5],
+        "precio": [None], "precio_compra": [88000.0],
+    }).to_csv(data_store.CRIPTOS_FILE, index=False)
+
+    df = data_store.load_criptos()
+
+    assert df.loc[0, "precio"] == 0.0
+
+
+def test_load_acciones_sin_archivo_trae_columna_precio():
+    assert "precio" in data_store.load_acciones().columns
+
+
+def test_load_acciones_migra_csv_viejo_sin_columna_precio():
+    pd.DataFrame({"ticker": ["AAPL"], "cantidad": [3.0], "precio_compra": [150.0]}).to_csv(
+        data_store.ACCIONES_FILE, index=False
+    )
+
+    df = data_store.load_acciones()
+
+    assert df.loc[0, "precio"] == 0.0
+
+
+def test_load_acciones_lee_el_precio_guardado():
+    pd.DataFrame({"ticker": ["AAPL"], "cantidad": [3.0], "precio": [220.5], "precio_compra": [150.0]}).to_csv(
+        data_store.ACCIONES_FILE, index=False
+    )
+
+    assert data_store.load_acciones().loc[0, "precio"] == 220.5
+
+
+def test_load_criptos_migrado_deja_precio_antes_de_precio_compra():
+    """El orden de columnas es el orden que ve el usuario en el data_editor:
+    un CSV migrado tiene que quedar igual que uno nuevo, con el precio actual
+    antes del precio de compra."""
+    pd.DataFrame({"id": ["bitcoin"], "simbolo": ["BTC"], "cantidad": [0.5], "precio_compra": [88000.0]}).to_csv(
+        data_store.CRIPTOS_FILE, index=False
+    )
+
+    columnas = list(data_store.load_criptos().columns)
+
+    assert columnas.index("precio") < columnas.index("precio_compra")
+
+
+def test_load_acciones_migrado_deja_precio_antes_de_precio_compra():
+    pd.DataFrame({"ticker": ["AAPL"], "cantidad": [3.0], "precio_compra": [150.0]}).to_csv(
+        data_store.ACCIONES_FILE, index=False
+    )
+
+    columnas = list(data_store.load_acciones().columns)
+
+    assert columnas.index("precio") < columnas.index("precio_compra")

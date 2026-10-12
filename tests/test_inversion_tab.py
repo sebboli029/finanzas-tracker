@@ -1,67 +1,90 @@
 import pandas as pd
 
-import config
 import inversion_tab
-from inversion_tab import _precios_de_activos, precio_unitario_base, tasa_usd_a_base
+from inversion_tab import _precios_de_activos, _valor_activos
 
 
-def test_precio_unitario_base_moneda_igual_a_base_pasa_directo():
-    assert precio_unitario_base(100, config.MONEDA_BASE, tasa_usd=1.0) == 100
+def test_precios_de_activos_usa_el_precio_cargado_a_mano():
+    activos = pd.DataFrame({
+        "id": ["bitcoin"], "cantidad": [2.0], "precio": [12000.0], "precio_compra": [10000.0],
+    })
 
+    filas = _precios_de_activos(activos, "id")
 
-def test_precio_unitario_base_usd_convierte_con_la_tasa():
-    assert precio_unitario_base(100, "USD", tasa_usd=4000) == 400000
-
-
-def test_precio_unitario_base_moneda_desconocida_devuelve_none():
-    assert precio_unitario_base(100, "JPY", tasa_usd=4000) is None
-
-
-def test_tasa_usd_a_base_es_uno_si_la_moneda_base_es_usd():
-    assert config.MONEDA_BASE == "USD"
-    assert tasa_usd_a_base() == 1.0
-
-
-def test_tasa_usd_a_base_usa_la_fila_dolares_si_la_base_no_es_usd(monkeypatch):
-    monkeypatch.setattr(config, "MONEDA_BASE", "EUR")
-    monedas = pd.DataFrame({"moneda": ["Dólares"], "monto": [0.0], "tasa": [0.92]})
-    monkeypatch.setattr(inversion_tab, "load_monedas", lambda: monedas)
-    monkeypatch.setattr(inversion_tab, "_actualizar_tasas_del_dia", lambda m: m)
-
-    assert tasa_usd_a_base() == 0.92
-
-
-def test_tasa_usd_a_base_sin_fila_dolares_devuelve_none(monkeypatch):
-    monkeypatch.setattr(config, "MONEDA_BASE", "EUR")
-    monedas = pd.DataFrame({"moneda": ["Libras"], "monto": [0.0], "tasa": [1.1]})
-    monkeypatch.setattr(inversion_tab, "load_monedas", lambda: monedas)
-    monkeypatch.setattr(inversion_tab, "_actualizar_tasas_del_dia", lambda m: m)
-
-    assert tasa_usd_a_base() is None
-
-
-def test_precios_de_activos_calcula_valor_y_ganancia():
-    activos = pd.DataFrame({"id": ["bitcoin"], "cantidad": [2.0], "precio_compra": [10000.0]})
-
-    filas = _precios_de_activos(activos, "id", lambda ident: (12000.0, "USD"), tasa_usd=1.0)
-
-    assert filas[0]["valor_base"] == 24000.0
-    assert filas[0]["ganancia_base"] == 4000.0
+    assert filas[0]["precio"] == 12000.0
+    assert filas[0]["valor"] == 24000.0
+    assert filas[0]["ganancia"] == 4000.0
     assert filas[0]["ganancia_pct"] == 20.0
 
 
+def test_precios_de_activos_calcula_perdida_cuando_el_precio_bajo():
+    activos = pd.DataFrame({
+        "ticker": ["AAPL"], "cantidad": [10.0], "precio": [90.0], "precio_compra": [100.0],
+    })
+
+    filas = _precios_de_activos(activos, "ticker")
+
+    assert filas[0]["ganancia"] == -100.0
+    assert filas[0]["ganancia_pct"] == -10.0
+
+
 def test_precios_de_activos_sin_precio_compra_no_calcula_ganancia():
-    activos = pd.DataFrame({"id": ["bitcoin"], "cantidad": [2.0], "precio_compra": [0.0]})
+    activos = pd.DataFrame({
+        "id": ["bitcoin"], "cantidad": [2.0], "precio": [12000.0], "precio_compra": [0.0],
+    })
 
-    filas = _precios_de_activos(activos, "id", lambda ident: (12000.0, "USD"), tasa_usd=1.0)
+    filas = _precios_de_activos(activos, "id")
 
-    assert filas[0]["valor_base"] == 24000.0
-    assert filas[0]["ganancia_base"] is None
+    assert filas[0]["valor"] == 24000.0
+    assert filas[0]["ganancia"] is None
 
 
-def test_precios_de_activos_fetch_fallido_deja_valor_none():
-    activos = pd.DataFrame({"id": ["bitcoin"], "cantidad": [2.0], "precio_compra": [10000.0]})
+def test_precios_de_activos_precio_en_cero_deja_valor_none():
+    """Precio sin cargar no vale cero: no se puede valorizar la fila, igual
+    que antes no se podía cuando fallaba el fetch."""
+    activos = pd.DataFrame({
+        "id": ["bitcoin"], "cantidad": [2.0], "precio": [0.0], "precio_compra": [10000.0],
+    })
 
-    filas = _precios_de_activos(activos, "id", lambda ident: None, tasa_usd=1.0)
+    filas = _precios_de_activos(activos, "id")
 
-    assert filas[0]["valor_base"] is None
+    assert filas[0]["valor"] is None
+    assert filas[0]["ganancia"] is None
+
+
+def test_precios_de_activos_no_depende_de_que_el_identificador_exista():
+    """El precio es el que cargó el usuario, así que un identificador que
+    ninguna API reconocería se valoriza igual que cualquier otro."""
+    activos = pd.DataFrame({
+        "id": ["mi-moneda-inventada"], "cantidad": [10.0], "precio": [5.0], "precio_compra": [0.0],
+    })
+
+    assert _precios_de_activos(activos, "id")[0]["valor"] == 50.0
+
+
+def test_precios_de_activos_ignora_filas_sin_identificador():
+    activos = pd.DataFrame({
+        "id": ["bitcoin", "", None], "cantidad": [1.0, 1.0, 1.0],
+        "precio": [100.0, 100.0, 100.0], "precio_compra": [0.0, 0.0, 0.0],
+    })
+
+    filas = _precios_de_activos(activos, "id")
+
+    assert [f["identificador"] for f in filas] == ["bitcoin"]
+
+
+def test_valor_activos_suma_solo_las_filas_con_precio_cargado():
+    activos = pd.DataFrame({
+        "id": ["bitcoin", "solana"], "cantidad": [2.0, 10.0],
+        "precio": [12000.0, 0.0], "precio_compra": [0.0, 0.0],
+    })
+
+    assert _valor_activos(lambda: activos, "id") == 24000.0
+
+
+def test_inversion_tab_no_consulta_precios_por_internet():
+    """La pestaña dejó de traer precios de CoinGecko y Yahoo Finance — lo
+    único que sigue saliendo a la red son las tasas de monedas."""
+    assert not hasattr(inversion_tab, "_precio_cripto")
+    assert not hasattr(inversion_tab, "_precio_accion")
+    assert not hasattr(inversion_tab, "precio_activo_de")

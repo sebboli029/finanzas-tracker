@@ -205,8 +205,8 @@ def ajustar_saldo_cuenta(cuentas, cuenta, delta):
 
 INVERSIONES_DEFAULT = ["FIC", "Inversión"]
 CRIPTOS_DEFAULT = [
-    {"id": "bitcoin", "simbolo": "BTC", "cantidad": 0.0, "precio_compra": 0.0},
-    {"id": "solana", "simbolo": "SOL", "cantidad": 0.0, "precio_compra": 0.0},
+    {"id": "bitcoin", "simbolo": "BTC", "cantidad": 0.0, "precio": 0.0, "precio_compra": 0.0},
+    {"id": "solana", "simbolo": "SOL", "cantidad": 0.0, "precio": 0.0, "precio_compra": 0.0},
 ]
 
 # Mismo set de 7 colores validado, slots 1-7, para el gráfico de distribución del patrimonio.
@@ -252,6 +252,18 @@ def save_monedas(df):
     guardar_con_respaldo(MONEDAS_FILE, df)
 
 
+def _asegurar_columnas_de_precio(df):
+    """Rellena en cero las columnas de precio que falten en un CSV viejo y
+    deja `precio` justo antes de `precio_compra`: el orden de las columnas es
+    el que ve el usuario en el data_editor, así que un archivo migrado tiene
+    que quedar igual que uno nuevo."""
+    if "precio_compra" not in df.columns:
+        df["precio_compra"] = 0.0
+    if "precio" not in df.columns:
+        df.insert(df.columns.get_loc("precio_compra"), "precio", 0.0)
+    return df
+
+
 def load_criptos():
     if not CRIPTOS_FILE.exists():
         df = pd.DataFrame(CRIPTOS_DEFAULT)
@@ -259,10 +271,9 @@ def load_criptos():
         # dtype fuerza "id" a texto: si todas las filas tienen el id vacío,
         # pandas la infiere como float64 (sin nada de texto para deducir el
         # tipo) y el data_editor no deja escribir letras en esa columna.
-        df = pd.read_csv(CRIPTOS_FILE, dtype={"id": "object"})
-        if "precio_compra" not in df.columns:
-            df["precio_compra"] = 0.0
+        df = _asegurar_columnas_de_precio(pd.read_csv(CRIPTOS_FILE, dtype={"id": "object"}))
     df["cantidad"] = df["cantidad"].astype(float)
+    df["precio"] = df["precio"].fillna(0.0).astype(float)
     df["precio_compra"] = df["precio_compra"].fillna(0.0).astype(float)
     return df
 
@@ -276,13 +287,13 @@ def load_acciones():
         df = pd.DataFrame({
             "ticker": pd.Series(dtype="str"),
             "cantidad": pd.Series(dtype="float"),
+            "precio": pd.Series(dtype="float"),
             "precio_compra": pd.Series(dtype="float"),
         })
     else:
-        df = pd.read_csv(ACCIONES_FILE, dtype={"ticker": "object"})
-        if "precio_compra" not in df.columns:
-            df["precio_compra"] = 0.0
+        df = _asegurar_columnas_de_precio(pd.read_csv(ACCIONES_FILE, dtype={"ticker": "object"}))
     df["cantidad"] = df["cantidad"].astype(float)
+    df["precio"] = df["precio"].fillna(0.0).astype(float)
     df["precio_compra"] = df["precio_compra"].fillna(0.0).astype(float)
     return df
 

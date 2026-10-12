@@ -1,10 +1,9 @@
 """Configuración de la app — ajustá esto para adaptarla a otra persona."""
 
-# Moneda en la que se muestran y guardan todos los montos de la app.
-# Si la cambiás a algo distinto de "USD", agregá "Dólares" a MONEDAS_DEFAULT
-# y MONEDA_A_CODIGO (en inversion_tab.py): la conversión de cripto y acciones
-# (que siempre cotizan en USD) necesita esa fila como pivote hacia la moneda
-# base.
+# Moneda en la que se muestran y guardan todos los montos de la app, incluidos
+# los precios de cripto y acciones que el usuario carga a mano en la Zona de
+# inversión. Lo único que se convierte es el monto de monedas extranjeras, con
+# la tasa que se trae hacia esta moneda.
 MONEDA_BASE = "USD"
 
 FORMATOS_MONEDA = {

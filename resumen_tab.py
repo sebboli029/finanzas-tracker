@@ -36,7 +36,6 @@ from data_store import (
     save_movimientos,
     save_periodos,
 )
-from inversion_tab import precio_activo_de, precio_unitario_base, tasa_usd_a_base
 
 UMBRAL_ALERTA_RESTANTE_PCT = 0.20  # advertir con menos del 20% del recibido restante
 
@@ -165,15 +164,33 @@ def _opciones_transferencia_inversion():
     return opciones
 
 
+def _precio_cargado(opcion):
+    """Precio que el usuario cargó a mano para un activo de cripto/acciones,
+    en la moneda base. None si todavía está en cero: sin precio no se puede
+    convertir un monto en cantidad ni valorizar la posición."""
+    activos = load_criptos() if opcion["tipo"] == "cripto" else load_acciones()
+    columna_id = "id" if opcion["tipo"] == "cripto" else "ticker"
+    fila = activos.loc[activos[columna_id] == opcion["identificador"]]
+    if fila.empty:
+        return None
+    precio = fila["precio"].iloc[0]
+    return precio if precio else None
+
+
+def _error_sin_precio(opcion):
+    st.error(
+        f"Cargá primero el precio de {opcion['etiqueta']} en la pestaña "
+        "\"Zona de inversión\" — sin precio no puedo convertir el monto en cantidad."
+    )
+
+
 def _guardar_transferencia_inversion(origen, opcion, monto, movimientos):
     if opcion["tipo"] == "manual":
         save_inversiones(ajustar_saldo_inversion(load_inversiones(), opcion["identificador"], monto))
     else:
-        resultado = precio_activo_de(opcion["tipo"], opcion["identificador"])
-        precio, moneda = resultado if resultado is not None else (None, None)
-        precio_unitario = precio_unitario_base(precio, moneda, tasa_usd_a_base()) if precio is not None else None
+        precio_unitario = _precio_cargado(opcion)
         if precio_unitario is None:
-            st.error("No se pudo traer el precio en vivo, intentá de nuevo en un momento.")
+            _error_sin_precio(opcion)
             return
         cantidad_nueva = monto / precio_unitario
         if opcion["tipo"] == "cripto":
@@ -226,15 +243,13 @@ def render_mover_a_inversion(movimientos):
 
 def _valor_disponible_inversion(opcion):
     """Cuánto se puede retirar hoy de `opcion`, en la moneda base: el saldo
-    directo para un ítem manual, o cantidad × precio de hoy para
-    cripto/acciones. Devuelve None si no se pudo traer el precio en vivo."""
+    directo para un ítem manual, o cantidad × el precio que cargó el usuario
+    para cripto/acciones. Devuelve None si ese precio no está cargado."""
     if opcion["tipo"] == "manual":
         inversiones = load_inversiones()
         return inversiones.loc[inversiones.item == opcion["identificador"], "saldo"].iloc[0]
 
-    resultado = precio_activo_de(opcion["tipo"], opcion["identificador"])
-    precio, moneda = resultado if resultado is not None else (None, None)
-    precio_unitario = precio_unitario_base(precio, moneda, tasa_usd_a_base()) if precio is not None else None
+    precio_unitario = _precio_cargado(opcion)
     if precio_unitario is None:
         return None
     activos = load_criptos() if opcion["tipo"] == "cripto" else load_acciones()
@@ -246,7 +261,7 @@ def _valor_disponible_inversion(opcion):
 def _guardar_retiro_inversion(destino, opcion, monto, movimientos):
     disponible = _valor_disponible_inversion(opcion)
     if disponible is None:
-        st.error("No se pudo traer el precio en vivo, intentá de nuevo en un momento.")
+        _error_sin_precio(opcion)
         return
     if monto > disponible:
         st.error(f"No podés retirar más de lo que hay en {opcion['etiqueta']} ({money(disponible)}).")
@@ -255,9 +270,7 @@ def _guardar_retiro_inversion(destino, opcion, monto, movimientos):
     if opcion["tipo"] == "manual":
         save_inversiones(ajustar_saldo_inversion(load_inversiones(), opcion["identificador"], -monto))
     else:
-        resultado = precio_activo_de(opcion["tipo"], opcion["identificador"])
-        precio, moneda = resultado
-        precio_unitario = precio_unitario_base(precio, moneda, tasa_usd_a_base())
+        precio_unitario = _precio_cargado(opcion)
         cantidad_vendida = monto / precio_unitario
         if opcion["tipo"] == "cripto":
             save_criptos(registrar_venta_activo(load_criptos(), "id", opcion["identificador"], cantidad_vendida))
