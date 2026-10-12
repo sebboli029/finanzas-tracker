@@ -162,9 +162,9 @@ def test_mover_dinero_entre_cuentas_ajusta_ambos_saldos():
 
     at = AppTest.from_function(_app)
     at.run()
-    at.selectbox(key="mov_origen").select("Ahorros").run()
-    at.selectbox(key="mov_destino").select("Cuenta corriente").run()
-    at.number_input(key="mov_monto").set_value(30).run()
+    at.selectbox(key="mov_origen").select("Ahorros")
+    at.selectbox(key="mov_destino").select("Cuenta corriente")
+    at.number_input(key="mov_monto").set_value(30)
     next(b for b in at.button if "Mover" == b.label.split(" ", 1)[-1] or b.label.endswith("Mover")).click().run()
 
     cuentas = data_store.load_cuentas()
@@ -187,9 +187,9 @@ def test_mover_dinero_origen_igual_a_destino_da_error():
 
     at = AppTest.from_function(_app)
     at.run()
-    at.selectbox(key="mov_origen").select("Ahorros").run()
-    at.selectbox(key="mov_destino").select("Ahorros").run()
-    at.number_input(key="mov_monto").set_value(10).run()
+    at.selectbox(key="mov_origen").select("Ahorros")
+    at.selectbox(key="mov_destino").select("Ahorros")
+    at.number_input(key="mov_monto").set_value(10)
     boton = next(b for b in at.button if b.label.endswith("Mover"))
     boton.click().run()
 
@@ -211,7 +211,7 @@ def test_ajustar_saldo_base_permite_negativo_para_tarjeta_de_credito():
 
     at = AppTest.from_function(_app)
     at.run()
-    at.number_input(key="cuenta_Tarjeta de crédito").set_value(-200).run()
+    at.number_input(key="cuenta_Tarjeta de crédito").set_value(-200)
     boton = next(b for b in at.button if "Guardar saldos" in b.label)
     boton.click().run()
 
@@ -253,9 +253,9 @@ def test_mover_a_inversion_manual_resta_disponible_y_sube_inversion():
     at = AppTest.from_function(_app)
     at.session_state["movimientos"] = movimientos
     at.run()
-    at.selectbox(key="mov_inv_origen").select("Ahorros").run()
-    at.selectbox(key="mov_inv_destino").select("FIC").run()
-    at.number_input(key="mov_inv_monto").set_value(100).run()
+    at.selectbox(key="mov_inv_origen").select("Ahorros")
+    at.selectbox(key="mov_inv_destino").select("FIC")
+    at.number_input(key="mov_inv_monto").set_value(100)
     boton = next(b for b in at.button if "Mover a inversión" in b.label)
     boton.click().run()
 
@@ -307,9 +307,9 @@ def test_retirar_inversion_manual_sube_cuenta_y_baja_inversion():
         columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
     )
     at.run()
-    at.selectbox(key="ret_inv_origen").select("FIC").run()
-    at.selectbox(key="ret_inv_destino").select("Ahorros").run()
-    at.number_input(key="ret_inv_monto").set_value(100).run()
+    at.selectbox(key="ret_inv_origen").select("FIC")
+    at.selectbox(key="ret_inv_destino").select("Ahorros")
+    at.number_input(key="ret_inv_monto").set_value(100)
     boton = next(b for b in at.button if "Retirar de inversión" in b.label)
     boton.click().run()
 
@@ -336,8 +336,8 @@ def test_retirar_inversion_manual_monto_mayor_al_saldo_da_error():
         columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"]
     )
     at.run()
-    at.selectbox(key="ret_inv_origen").select("FIC").run()
-    at.number_input(key="ret_inv_monto").set_value(999).run()
+    at.selectbox(key="ret_inv_origen").select("FIC")
+    at.number_input(key="ret_inv_monto").set_value(999)
     boton = next(b for b in at.button if "Retirar de inversión" in b.label)
     boton.click().run()
 
@@ -792,9 +792,9 @@ def test_mover_a_inversion_cripto_usa_el_precio_cargado_a_mano():
     at = AppTest.from_function(_app_mover_a_inversion)
     at.session_state["movimientos"] = _sin_movimientos()
     at.run()
-    at.selectbox(key="mov_inv_origen").select("Ahorros").run()
-    at.selectbox(key="mov_inv_destino").select("🪙 BTC").run()
-    at.number_input(key="mov_inv_monto").set_value(300).run()
+    at.selectbox(key="mov_inv_origen").select("Ahorros")
+    at.selectbox(key="mov_inv_destino").select("🪙 BTC")
+    at.number_input(key="mov_inv_monto").set_value(300)
     next(b for b in at.button if "Mover a inversión" in b.label).click().run()
 
     criptos = data_store.load_criptos()
@@ -816,9 +816,9 @@ def test_mover_a_inversion_cripto_sin_precio_cargado_da_error():
     at = AppTest.from_function(_app_mover_a_inversion)
     at.session_state["movimientos"] = _sin_movimientos()
     at.run()
-    at.selectbox(key="mov_inv_origen").select("Ahorros").run()
-    at.selectbox(key="mov_inv_destino").select("🪙 BTC").run()
-    at.number_input(key="mov_inv_monto").set_value(300).run()
+    at.selectbox(key="mov_inv_origen").select("Ahorros")
+    at.selectbox(key="mov_inv_destino").select("🪙 BTC")
+    at.number_input(key="mov_inv_monto").set_value(300)
     next(b for b in at.button if "Mover a inversión" in b.label).click().run()
 
     assert len(at.error) == 1
@@ -837,9 +837,9 @@ def test_retirar_de_inversion_cripto_usa_el_precio_cargado_a_mano():
     at = AppTest.from_function(_app_retirar_de_inversion)
     at.session_state["movimientos"] = _sin_movimientos()
     at.run()
-    at.selectbox(key="ret_inv_origen").select("🪙 BTC").run()
-    at.selectbox(key="ret_inv_destino").select("Ahorros").run()
-    at.number_input(key="ret_inv_monto").set_value(200).run()
+    at.selectbox(key="ret_inv_origen").select("🪙 BTC")
+    at.selectbox(key="ret_inv_destino").select("Ahorros")
+    at.number_input(key="ret_inv_monto").set_value(200)
     next(b for b in at.button if "Retirar" in b.label).click().run()
 
     assert data_store.load_criptos().loc[0, "cantidad"] == 3.0
@@ -856,9 +856,9 @@ def test_retirar_de_inversion_cripto_no_deja_retirar_mas_que_el_valor_cargado():
     at = AppTest.from_function(_app_retirar_de_inversion)
     at.session_state["movimientos"] = _sin_movimientos()
     at.run()
-    at.selectbox(key="ret_inv_origen").select("🪙 BTC").run()
-    at.selectbox(key="ret_inv_destino").select("Ahorros").run()
-    at.number_input(key="ret_inv_monto").set_value(500).run()
+    at.selectbox(key="ret_inv_origen").select("🪙 BTC")
+    at.selectbox(key="ret_inv_destino").select("Ahorros")
+    at.number_input(key="ret_inv_monto").set_value(500)
     next(b for b in at.button if "Retirar" in b.label).click().run()
 
     assert len(at.error) == 1
