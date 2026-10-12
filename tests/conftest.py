@@ -32,9 +32,9 @@ import inversion_tab
 
 @pytest.fixture(autouse=True)
 def _sin_red_inversion(monkeypatch):
-    """Simula estar sin internet para toda la suite: la app ya sabe seguir
-    con la última tasa o valor guardado cuando el fetch en vivo devuelve
-    None. Sin esto, correr la suite sin conexión sería flaky."""
+    """Simula estar sin internet para toda la suite: la sección de monedas
+    ya sabe seguir con la última tasa guardada cuando el fetch devuelve
+    None. Sin esto, correr la suite sin conexión sería flaky. Cripto y
+    acciones no aparecen acá porque su precio lo carga el usuario a mano:
+    no hay red que simular."""
     monkeypatch.setattr(inversion_tab, "_tasa_en_vivo", lambda codigo, moneda_destino: None)
-    monkeypatch.setattr(inversion_tab, "_precio_cripto", lambda id_coingecko: None)
-    monkeypatch.setattr(inversion_tab, "_precio_accion", lambda ticker: None)

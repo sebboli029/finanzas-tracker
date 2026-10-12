@@ -755,3 +755,111 @@ def test_render_historial_no_explota_con_datos_sembrados():
     at.session_state["periodos"] = _periodo_unico()
     at.run()
     assert not at.exception
+
+
+def _criptos_con(precio, cantidad=0.0, precio_compra=0.0):
+    return pd.DataFrame({
+        "id": ["bitcoin"], "simbolo": ["BTC"], "cantidad": [cantidad],
+        "precio": [precio], "precio_compra": [precio_compra],
+    })
+
+
+def _app_mover_a_inversion():
+    import streamlit as st
+
+    import resumen_tab
+    resumen_tab.render_mover_a_inversion(st.session_state["movimientos"])
+
+
+def _app_retirar_de_inversion():
+    import streamlit as st
+
+    import resumen_tab
+    resumen_tab.render_retirar_inversion(st.session_state["movimientos"])
+
+
+def _sin_movimientos():
+    return pd.DataFrame(columns=["fecha", "tipo", "categoria", "monto", "periodo_id", "nota", "cuenta"])
+
+
+def test_mover_a_inversion_cripto_usa_el_precio_cargado_a_mano():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [500]}))
+    data_store.save_inversiones(pd.DataFrame({"item": [], "saldo": [], "actualizado": []}))
+    data_store.save_criptos(_criptos_con(precio=100.0))
+
+    at = AppTest.from_function(_app_mover_a_inversion)
+    at.session_state["movimientos"] = _sin_movimientos()
+    at.run()
+    at.selectbox(key="mov_inv_origen").select("Ahorros").run()
+    at.selectbox(key="mov_inv_destino").select("🪙 BTC").run()
+    at.number_input(key="mov_inv_monto").set_value(300).run()
+    next(b for b in at.button if "Mover a inversión" in b.label).click().run()
+
+    criptos = data_store.load_criptos()
+    assert criptos.loc[0, "cantidad"] == 3.0
+    assert criptos.loc[0, "precio_compra"] == 100.0
+    assert data_store.load_cuentas().loc[0, "saldo"] == 200
+
+
+def test_mover_a_inversion_cripto_sin_precio_cargado_da_error():
+    """Sin precio no se puede convertir plata en cantidad — el error tiene
+    que decirle al usuario dónde cargarlo, no hablar de un fetch que ya no
+    existe."""
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [500]}))
+    data_store.save_inversiones(pd.DataFrame({"item": [], "saldo": [], "actualizado": []}))
+    data_store.save_criptos(_criptos_con(precio=0.0))
+
+    at = AppTest.from_function(_app_mover_a_inversion)
+    at.session_state["movimientos"] = _sin_movimientos()
+    at.run()
+    at.selectbox(key="mov_inv_origen").select("Ahorros").run()
+    at.selectbox(key="mov_inv_destino").select("🪙 BTC").run()
+    at.number_input(key="mov_inv_monto").set_value(300).run()
+    next(b for b in at.button if "Mover a inversión" in b.label).click().run()
+
+    assert len(at.error) == 1
+    assert "precio" in at.error[0].value.lower()
+    assert data_store.load_criptos().loc[0, "cantidad"] == 0.0
+    assert data_store.load_cuentas().loc[0, "saldo"] == 500
+
+
+def test_retirar_de_inversion_cripto_usa_el_precio_cargado_a_mano():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [0]}))
+    data_store.save_inversiones(pd.DataFrame({"item": [], "saldo": [], "actualizado": []}))
+    data_store.save_criptos(_criptos_con(precio=100.0, cantidad=5.0, precio_compra=80.0))
+
+    at = AppTest.from_function(_app_retirar_de_inversion)
+    at.session_state["movimientos"] = _sin_movimientos()
+    at.run()
+    at.selectbox(key="ret_inv_origen").select("🪙 BTC").run()
+    at.selectbox(key="ret_inv_destino").select("Ahorros").run()
+    at.number_input(key="ret_inv_monto").set_value(200).run()
+    next(b for b in at.button if "Retirar" in b.label).click().run()
+
+    assert data_store.load_criptos().loc[0, "cantidad"] == 3.0
+    assert data_store.load_cuentas().loc[0, "saldo"] == 200
+
+
+def test_retirar_de_inversion_cripto_no_deja_retirar_mas_que_el_valor_cargado():
+    import data_store
+
+    data_store.save_cuentas(pd.DataFrame({"cuenta": ["Ahorros"], "saldo": [0]}))
+    data_store.save_inversiones(pd.DataFrame({"item": [], "saldo": [], "actualizado": []}))
+    data_store.save_criptos(_criptos_con(precio=100.0, cantidad=2.0))
+
+    at = AppTest.from_function(_app_retirar_de_inversion)
+    at.session_state["movimientos"] = _sin_movimientos()
+    at.run()
+    at.selectbox(key="ret_inv_origen").select("🪙 BTC").run()
+    at.selectbox(key="ret_inv_destino").select("Ahorros").run()
+    at.number_input(key="ret_inv_monto").set_value(500).run()
+    next(b for b in at.button if "Retirar" in b.label).click().run()
+
+    assert len(at.error) == 1
+    assert data_store.load_criptos().loc[0, "cantidad"] == 2.0
